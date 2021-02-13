@@ -7,11 +7,11 @@ let currentPage;
 /*
 0: run-time default
 >=1: debug
-1: new page log
+1: new page log, got captcha log
 2: clear page log
 3: print page.url()
 */
-let verbosity = 1;
+let verbosity = 0;
 // take screen shot when error occurred. for debugging
 let should_takeScreenshot = 0;
 
@@ -47,7 +47,11 @@ async function findTargetResult(url, keyword, maxPage){
     if(results === null){
         throw new Error('session abandoned');
     }
-    let ranking = await findTargetWebsiteInPageResults(url, results);
+    if(await results === -1){
+        return -1;
+    };
+
+    let ranking = await findTargetWebsiteInPageResults(url, await results);
     if(ranking != null){
         return {
             page: pageNumber,
@@ -61,6 +65,7 @@ async function findTargetResult(url, keyword, maxPage){
         if(verbosity > 0){
             console.log(`正在搜索第${pageNumber}页`)
         }
+        if(await results === -1) return -1;
         results = await getPageResultList(await getNextPageHref());
         if(results === null){
             throw new Error('session abandoned');
@@ -162,14 +167,14 @@ async function openPage(url){
     newPage = await browser.newPage();
     // await setHeaders(newPage);
     try{
-        let waitPromise = newPage.waitForNavigation({waitUntil: 'networkidle0'})
+        // let waitPromise = newPage.waitForNavigation({waitUntil: 'networkidle0'})
         await newPage.goto(url, { waitUntil: 'domcontentloaded' });
         currentPage = await newPage;
     
         if(verbosity === 3){
             console.log(await currentPage.url());
         }
-        await waitPromise;
+        // await waitPromise;
         if(verbosity === 1){
             console.log('new page')
         }
@@ -207,6 +212,14 @@ async function takeScreenshot(){
     console.log('screenshot taken')
 }
 
+// reuturns true if baidu responded with captcha
+async function checkSecurityBan(){
+    let url = await currentPage.url();
+    return url.includes('wappass.baidu.com/static/captcha')
+}
+
+
+// returns -1 if baidu returned captcha
 var tried = false;
 async function getPageResultList(url){
     try{
@@ -216,7 +229,18 @@ async function getPageResultList(url){
             tried = false;
             return urlIdList;
         } 
+        if(await checkSecurityBan()){
+            if(verbosity === 1){
+                console.log('got captcha')
+            }
+            return -1;
+        }
+
         await new Promise(resolve => setTimeout(resolve, 4000));
+        await takeScreenshot()
+        if(verbosity >= 1){
+            console.log(await currentPage.url());
+        }
         return await getPageResultList(url);
     }catch(err){
         console.error(err.message);
@@ -227,10 +251,10 @@ async function getPageResultList(url){
             return await getPageResultList(url);
         }
         
-        if(err.message.includes('Navigation timeout')){
-            console.error(`大概率触发了百度安全验证，休息${breakTimeForSecurityCheck}分钟继续`)
-        }
-        await new Promise(resolve => setTimeout(resolve, breakTimeForSecurityCheck * 60000));
+        // if(err.message.includes('Navigation timeout')){
+        //     console.error(`大概率触发了百度安全验证，休息${breakTimeForSecurityCheck}分钟继续`)
+        // }
+        // await new Promise(resolve => setTimeout(resolve, breakTimeForSecurityCheck * 60000));
         return null;
     }
 

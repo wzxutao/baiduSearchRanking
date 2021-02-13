@@ -44,6 +44,11 @@ async function searchForKeyword(settingDetails, keyword, records){
     let ranking = null;
     try{
         ranking = await ib.findTargetResult(settingDetails.targetWebsite, keyword, settingDetails.maxPage);
+        if(ranking === -1){
+            recorder.setRecord(records, keyword, 'captcha', 'captcha')
+            console.log(`${keyword} 触发了安全验证！\n`);
+            return -1;
+        }
     }catch(err){
         console.log(err.message);
         return;
@@ -51,8 +56,8 @@ async function searchForKeyword(settingDetails, keyword, records){
     
     let willPopUp = true;
     if(ranking == null){
-        console.log(`${keyword} ${settingDetails.maxPage}页都找不到 ！`);
-        recorder.setRecord(records, keyword, 'Not Found', 'Not Found')
+        console.log(`${keyword} ${settingDetails.maxPage}页都找不到 ！\n`);
+        recorder.setRecord(records, keyword, 'NotFound', 'NotFound')
         
     }else{
         let rank = ranking.ID > 1000 ? "广告": ranking.ID
@@ -77,12 +82,21 @@ async function startSearchingSession(settingDetails){
 
     let records = {}
 
+
+    let waitForLiftingCaptcha = false;
     for(let i=0; i<settingDetails.keywords.length; i++){
         let keyword = settingDetails.keywords[i];
-        await searchForKeyword(settingDetails, keyword, records);
+        let rv = await searchForKeyword(settingDetails, keyword, records);
+        if(rv === -1){
+            waitForLiftingCaptcha = true;
+        }
         await new Promise(resolve => setTimeout(resolve, settingDetails.keywordsInterval * 1000));
     }
     await recorder.recordDateTime(records);
     await recorder.log(records);
+    if(waitForLiftingCaptcha){
+        console.log(`触发了百度安全验证，休息${settingDetails.breakTimeForSecurityCheck}分钟继续`)
+        await new Promise(resolve => setTimeout(resolve, settingDetails.breakTimeForSecurityCheck * 60000));
+    }
 }
 
