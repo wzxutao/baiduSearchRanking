@@ -118,3 +118,6 @@ dist
 # userdata
 *.json
 *.csv
+
+# debugging data
+screenshots/

@@ -11,7 +11,10 @@ let currentPage;
 2: clear page log
 3: print page.url()
 */
-let verbosity = 0;
+let verbosity = 1;
+// take screen shot when error occurred. for debugging
+let should_takeScreenshot = 0;
+
 
 let initialResultPageUrl = null;
 // sleeps for n minutes after activated baidu's security check
@@ -158,17 +161,24 @@ async function openPage(url){
     await closeAllPages();
     newPage = await browser.newPage();
     // await setHeaders(newPage);
-    let waitPromise = newPage.waitForNavigation({waitUntil: 'networkidle0'})
-    await newPage.goto(url, { waitUntil: 'domcontentloaded' });
-    currentPage = await newPage;
-
-    if(verbosity === 3){
-        console.log(await currentPage.url());
+    try{
+        let waitPromise = newPage.waitForNavigation({waitUntil: 'networkidle0'})
+        await newPage.goto(url, { waitUntil: 'domcontentloaded' });
+        currentPage = await newPage;
+    
+        if(verbosity === 3){
+            console.log(await currentPage.url());
+        }
+        await waitPromise;
+        if(verbosity === 1){
+            console.log('new page')
+        }
+    }catch(err){
+        console.error(err.message);
+        await takeScreenshot();
+        throw err
     }
-    await waitPromise;
-    if(verbosity === 1){
-        console.log('new page')
-    }
+    
 }
 
 // returns the href attribute of the a tag of the next page button as string
@@ -184,6 +194,17 @@ async function getNextPageHref() {
     }
 
     throw new Error("unable to find the next page button");  
+}
+
+async function takeScreenshot(){
+    if(!should_takeScreenshot) return;
+    const tNow = new Date();
+
+    let dateNow = tNow.toDateString()
+    let timeNow = tNow.toLocaleTimeString().replace(/:/g, "-")
+    let path = 'screenshots/' + dateNow + timeNow + '.png'
+    await currentPage.screenshot({path: path})
+    console.log('screenshot taken')
 }
 
 var tried = false;
@@ -202,6 +223,7 @@ async function getPageResultList(url){
         // try one more time
         if(!tried){
             tried = true;
+            console.log('正在重试...')
             return await getPageResultList(url);
         }
         
@@ -215,10 +237,14 @@ async function getPageResultList(url){
 }
 
 async function closeAllPages(){
+    const maxPageCount = 10;
+
+    let pages = await browser.pages();
+    if(pages.length < maxPageCount) return;
+
     if(verbosity == 2){
         console.log('clearing browser pages')
     }
-    let pages = await browser.pages();
     for(let i=0; i<pages.length; i++){
         await pages[i].goto('about:blank')
         await pages[i].close()

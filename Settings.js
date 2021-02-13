@@ -7,7 +7,6 @@ const fs = require("fs");
 
 const saveFileName = "settings.json";
 
-
 let settingDetails = null;
 
 // asks the user to set all of the settings
@@ -20,11 +19,13 @@ async function setAll(){
     settingDetails.keywords = splitKeywords(await settingDetails.keywords, seperators)
     console.log(settingDetails.keywords);
     settingDetails.maxPage = await getLine("最多找几页？：", true)
-    settingDetails.ketwordsInterval = await getLine("不同关键词之间隔多少秒查找？：", true)
+    settingDetails.keywordsInterval = await getLine("不同关键词之间隔多少秒查找？：", true)
     settingDetails.repeatInterval = await getLine("查询结束后过多少秒自动再次查找？：", true)
     settingDetails.breakTimeForSecurityCheck = await getLine("触发百度安全验证后过多少分钟重试？（建议>=5）：", true)
     let choice = await getLine("掉出第一页就弹窗提示？Y/N 默认Y: ", false, true);
     settingDetails.alert = (choice.toUpperCase() === "N" ? 0 : 1)
+    choice = await getLine("保存记录？Y/N 默认Y: ", false, true);
+    settingDetails.save = (choice.toUpperCase() === "N" ? 0 : 1)
 
     // write settings to file
     const data = JSON.stringify(settingDetails);
@@ -68,11 +69,28 @@ function splitKeywords(srcStr, seperators){
     return arr;
 }
 
+// check whether the setting file contains all the fields needed
+// returns false if check failed
+function checkSettingFile(settingsToCheck){
+    const attrs = ['targetWebsite', 'keywords', 'maxPage', 'keywordsInterval', 'repeatInterval',
+        'breakTimeForSecurityCheck', 'alert', 'save'
+    ]
+
+    for(let i=0; i<attrs.length; i++){
+        if(settingsToCheck[attrs[i]] === undefined){
+            console.log('检测到了设置文件但其版本太低 需要重新设置\n')
+            return false;
+        }
+    }
+    return true;
+}
+
 async function loadSettings(){
     let willSet = false;
     try{
         let readData = fs.readFileSync(saveFileName);
         settingDetails = JSON.parse(readData);
+        if(!checkSettingFile(settingDetails)) return setAll();
         let choice = await getLine("使用上次的设置？Y/N 默认Y: ", false, true)
         if(choice.toUpperCase() === "N"){
             willSet = true;
